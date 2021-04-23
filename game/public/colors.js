@@ -1,0 +1,1 @@
+const COLORS = ['amarillo','azul','blanco','rojo','rosa','verde','negro'];
