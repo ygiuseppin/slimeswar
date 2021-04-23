@@ -64,7 +64,7 @@ class GameScene extends Phaser.Scene {
     }
 
     sendMessage(message) {
-        console.log('send message:', message);
+       this.socket.emit('message', {message});
     }
     create () {
         // bg
@@ -132,8 +132,6 @@ class GameScene extends Phaser.Scene {
 
         timer.paused = false;  
         console.log('Game Created');  
-
-        
     }
 
     myUpdate (self) {
@@ -143,10 +141,8 @@ class GameScene extends Phaser.Scene {
                 self.nameSent = true;
             }
             self.player1Movement();
-            // emit player movement
-            var x = self.player.x;
-            var y = self.player.y;
 
+            // send position always
             //if (self.player.oldPosition && (x !== self.player.oldPosition.x || y !== self.player.oldPosition.y)) {
                 self.socket.emit('playerMovement', { x: self.player.x, y: self.player.y, frame: self.player.anims.getFrameName().toString() });
             //}

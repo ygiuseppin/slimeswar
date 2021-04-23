@@ -12,7 +12,7 @@ var config = {
     dom: {
         createContainer: true
     },
-    scene: [Scene0,Scene1],
+    scene: [MenuScene,GameScene],
     pixelArt: false
 };
 

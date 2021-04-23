@@ -14,7 +14,7 @@ const io = new socketio.Server();
 io.listen(server);
 
 io.on('connection', function (socket) {
-    console.log('User connected');
+    console.log('user connected'.green);
 
     // create a new player and add it to our players object
     players[socket.id] = {
@@ -35,7 +35,7 @@ io.on('connection', function (socket) {
    
     // when a player disconnects, remove them from our players object
     socket.on('disconnect', function () {
-      console.log('user disconnected');
+      console.log('user disconnected'.red);
       // remove this player from our players object
       
       delete players[socket.id];
@@ -44,17 +44,17 @@ io.on('connection', function (socket) {
     });
 
     socket.on('playerInfo', function (playerInfo) {
+        console.log(`playerinfo name: ${playerInfo.name} color: ${playerInfo.color}`.yellow);
         players[socket.id].name = playerInfo.name;
         players[socket.id].color = playerInfo.color;
         socket.broadcast.emit('playerInfo', players[socket.id]);
     });
 
-    socket.on('message', function() {
-
+    socket.on('message', function(messageInfo) {
+      console.log(`message: "${messageInfo.message}" from: ${players[socket.id].name}`.blue)
     });
 
     socket.on('playerMovement', function (movementData) {
-        console.log(new Date());
         players[socket.id].x = movementData.x;
         players[socket.id].y = movementData.y;
         players[socket.id].frame = movementData.frame;
@@ -64,7 +64,7 @@ io.on('connection', function (socket) {
     });
 });
 
-router.get('/', (req,res)=>{
+router.get('/', (req, res)=>{
     res.sendFile(path.join(__dirname+'/public/index.html'));
 });
 
