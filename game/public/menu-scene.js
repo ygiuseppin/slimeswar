@@ -1,5 +1,5 @@
 // Main menu
-class Scene0 extends Phaser.Scene {
+class MenuScene extends Phaser.Scene {
     constructor() {
         super("menu");
     }
@@ -37,6 +37,7 @@ class Scene0 extends Phaser.Scene {
                 // enter the game
                 this.scene.start('playGame');
             }
+            
         })
     }
 }
