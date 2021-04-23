@@ -3,6 +3,15 @@ const WORLD_WIDTH = 1600;
 const WORLD_HEIGHT = 1200;
 const CAMERA_WIDTH = 800;
 const CAMERA_HEIGHT = 600;
+const POO_DELAY = 3000;
+
+class OtherPlayer {
+
+
+
+}
+
+
 
 // Game Scene
 class GameScene extends Phaser.Scene {
@@ -10,9 +19,7 @@ class GameScene extends Phaser.Scene {
         super("playGame");
     }
 
-    preload () {
-        console.log('Loading game');
-
+    createChat () {
         // create chat
         $('body').append(`
             <div id="chatDiv">
@@ -31,27 +38,43 @@ class GameScene extends Phaser.Scene {
                 $('#message').val("");
             }
         });
-
+        
         // enable/disable keyboard input if chat is disabled/enabled
         $('#message').on('focus',()=>{game.input.keyboard.enabled = false});
         $('#message').on('focusout',()=>{game.input.keyboard.enabled = true});
+    }
 
-        this.nameSent = false;
-        this.load.bitmapFont('myfont', 'assets/fonts/bitmapFonts/nokia.png', 'assets/fonts/bitmapFonts/nokia.xml');
-        this.color = localStorage.getItem('color');
+    preload () {
+        console.log('Loading game');
 
-        // load tiles
-        this.load.image('sandtile', './assets/tiles/grass1.png');
-        
+        // initial values
         this.otherPlayers = this.physics.add.group();
         this.otherNames = {};
+        this.poos = this.physics.add.group();
+        this.lastPooTime = new Date();
+        this.nameSent = false;
+        this.color = localStorage.getItem('color');
+        this.playerName = localStorage.getItem('name');
 
+        this.createChat();
+        
+        this.load.bitmapFont('myfont', 'assets/fonts/bitmapFonts/nokia.png', 'assets/fonts/bitmapFonts/nokia.xml');
+        this.color = localStorage.getItem('color');
+        this.load.image('sandtile', './assets/tiles/grass1.png');
         this.loadSprites();
 
         console.log('Game Loaded');
     }
 
     loadSprites() {
+
+        // poo
+        this.load.spritesheet(`poo`, `./assets/slimes/poo.png`,{ 
+            frameWidth: 41, 
+            frameHeight: 54 
+        });
+
+        // slimes
         for (let color of COLORS) {
             this.load.spritesheet(`slime${color}`, `./assets/slimes/slime${color}.png`,{ 
                 frameWidth: 49, 
@@ -61,6 +84,15 @@ class GameScene extends Phaser.Scene {
     }
 
     createAnimations() {
+        // poo
+        this.anims.create({
+            key:`pooAnim`,
+            frames: this.anims.generateFrameNumbers(`poo`,{start:0,end:3}),
+            frameRate: 10,
+            repeat: true
+        });
+
+        // players
         for (let color of COLORS) {
             this.anims.create({
                 key:`move${color}`,
@@ -152,6 +184,7 @@ class GameScene extends Phaser.Scene {
 
         //  Input Events
         this.cursors = this.input.keyboard.createCursorKeys();
+        this.wKey = this.input.keyboard.addKey('W');  // Get key object
 
         var timer = this.time.addEvent({
             delay: 3,callback:()=>{this.myUpdate(this)},loop:true});
@@ -178,7 +211,7 @@ class GameScene extends Phaser.Scene {
             };
 
             // update player list
-            let playerListText = `${self.myname.text}\n`;
+            let playerListText = `${self.playerName}\n`;
             for (var key in self.otherNames){
                 playerListText += self.otherNames[key].text +'\n'
             }
@@ -187,7 +220,7 @@ class GameScene extends Phaser.Scene {
     }
 
     addPlayer(self, playerInfo) {
-        self.myname = self.add.bitmapText(10, 100, 'myfont', localStorage.getItem('name'),14);
+        self.myname = self.add.bitmapText(10, 100, 'myfont', self.playerName, 14);
         self.player = self.physics.add.sprite(playerInfo.x, playerInfo.y, 'slimeverde');
         self.player.setCollideWorldBounds(true);
 
@@ -207,7 +240,17 @@ class GameScene extends Phaser.Scene {
         self.otherPlayers.add(otherPlayer);
     }
 
+
     player1Movement(){
+
+        // add poo
+        if (this.wKey.isDown && (new Date() - this.lastPooTime) > POO_DELAY){
+            this.lastPooTime = new Date();
+            const newPoo = this.physics.add.sprite(this.player.x, this.player.y, 'poo');
+            //newPoo.play({key:'pooAnim', repeat:100});
+            this.poos.add(newPoo);
+        }
+
         if (this.cursors.left.isDown){
             this.player.setVelocityX(-200);
         } else if (this.cursors.right.isDown){
