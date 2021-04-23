@@ -51,7 +51,9 @@ io.on('connection', function (socket) {
     });
 
     socket.on('message', function(messageInfo) {
-      console.log(`message: "${messageInfo.message}" from: ${players[socket.id].name}`.blue)
+      console.log(`message: "${messageInfo.message}" from: ${players[socket.id].name}`.blue);
+      socket.emit('newMessage', {player:players[socket.id], message:messageInfo.message});
+      socket.broadcast.emit('newMessage', {player:players[socket.id], message:messageInfo.message});
     });
 
     socket.on('playerMovement', function (movementData) {

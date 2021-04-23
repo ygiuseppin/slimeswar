@@ -1,3 +1,9 @@
+// constants
+const WORLD_WIDTH = 1600;
+const WORLD_HEIGHT = 1200;
+const CAMERA_WIDTH = 800;
+const CAMERA_HEIGHT = 600;
+
 // Game Scene
 class GameScene extends Phaser.Scene {
     constructor() {
@@ -5,23 +11,31 @@ class GameScene extends Phaser.Scene {
     }
 
     preload () {
+        console.log('Loading game');
 
         // create chat
         $('body').append(`
-        <div>
-            <textarea id="chatArea"></textarea>
-            <form id="chatForm">
-                <input id="message" type="text">
-                <input id="chatButton" type="submit" value="Enviar">
-            </form>
-        </div>
+            <div id="chatDiv">
+                <textarea readonly id="playerList"></textarea>
+                <textarea readonly id="chatArea"></textarea>
+                <form id="chatForm" autocomplete="off">
+                    <input id="message" type="text" name="message">
+                    <input id="chatButton" type="submit" value="Enviar">
+                </form>
+            </div>
         `);
         $('#chatForm').submit((e) => {
             e.preventDefault();
-            this.sendMessage($('#message').val());
+            if ($('#message').val() !== ""){
+                this.sendMessage($('#message').val());
+                $('#message').val("");
+            }
         });
 
-        console.log('Loading game');
+        // enable/disable keyboard input if chat is disabled/enabled
+        $('#message').on('focus',()=>{game.input.keyboard.enabled = false});
+        $('#message').on('focusout',()=>{game.input.keyboard.enabled = true});
+
         this.nameSent = false;
         this.load.bitmapFont('myfont', 'assets/fonts/bitmapFonts/nokia.png', 'assets/fonts/bitmapFonts/nokia.xml');
         this.color = localStorage.getItem('color');
@@ -64,13 +78,15 @@ class GameScene extends Phaser.Scene {
     }
 
     sendMessage(message) {
-       this.socket.emit('message', {message});
+        this.socket.emit('message', {message});
     }
+
     create () {
         // bg
-        this.tilesprite = this.add.tileSprite(400, 300, 1600, 1200, 'sandtile');
+        this.tilesprite = this.add.tileSprite(400, 300, WORLD_WIDTH, WORLD_HEIGHT, 'sandtile');
         const self = this;
         this.socket = io();
+        this.physics.world.bounds = new Phaser.Geom.Rectangle(-400, -300, WORLD_WIDTH, WORLD_HEIGHT);
 
         // socket
         this.socket.on('currentPlayers', function (players) {
@@ -82,6 +98,14 @@ class GameScene extends Phaser.Scene {
                 }
             });
         });
+
+        this.socket.on('newMessage', function (messageInfo) {
+            console.log('New message received: ', messageInfo);
+            const addToChat = `${messageInfo.player.name}: ${messageInfo.message}`;
+            $("#chatArea").text($("#chatArea").text() + addToChat + '\n');
+            $("#chatArea").scrollTop($("#chatArea")[0].scrollHeight);
+        });
+
         this.socket.on('newPlayer', function (playerInfo) {
             self.addOtherPlayers(self, playerInfo);
         });
@@ -99,10 +123,12 @@ class GameScene extends Phaser.Scene {
             }
         });
         this.socket.on('disconnectPlayer', function (playerId) {
+            console.log('player disconnected');
             self.otherPlayers.getChildren().forEach(function (otherPlayer) {
               if (playerId === otherPlayer.playerId) {
                 otherPlayer.destroy();
                 self.otherNames[playerId].destroy();
+                delete self.otherNames[playerId];
               }
             });
         });
@@ -150,15 +176,23 @@ class GameScene extends Phaser.Scene {
                 x: self.player.x,
                 y: self.player.y,
             };
+
+            // update player list
+            let playerListText = `${self.myname.text}\n`;
+            for (var key in self.otherNames){
+                playerListText += self.otherNames[key].text +'\n'
+            }
+            $('#playerList').text(playerListText);
         }
     }
 
     addPlayer(self, playerInfo) {
         self.myname = self.add.bitmapText(10, 100, 'myfont', localStorage.getItem('name'),14);
         self.player = self.physics.add.sprite(playerInfo.x, playerInfo.y, 'slimeverde');
-        //self.player.setCollideWorldBounds(true);
+        self.player.setCollideWorldBounds(true);
 
         self.cameras.main.startFollow(self.player, true, 0.08, 0.08);
+        self.cameras.main.setBackgroundColor('#4d755f');
     }
 
     addOtherPlayers(self, playerInfo) {
