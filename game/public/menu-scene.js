@@ -25,6 +25,10 @@ class MenuScene extends Phaser.Scene {
         this.title.setPosition(400-this.title.width/2,200);
 
         this.nameInput = this.add.dom(400, 300).createFromCache('menu');
+        
+        $('#nombre').val(localStorage.getItem('name'));
+        $('#color').val(localStorage.getItem('color'));
+        
         this.nameInput.getChildByID('boton').addEventListener('click', ()=> {
             const inputname = this.nameInput.getChildByID('nombre').value;
             if(inputname.length > 12 || inputname.length < 3){
@@ -37,7 +41,6 @@ class MenuScene extends Phaser.Scene {
                 // enter the game
                 this.scene.start('playGame');
             }
-            
         })
     }
 }

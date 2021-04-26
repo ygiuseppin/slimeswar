@@ -14,13 +14,13 @@ const io = new socketio.Server();
 io.listen(server);
 
 io.on('connection', function (socket) {
-    console.log('user connected'.green);
+    console.log(`user connected: ${socket.id}`.green);
 
     // create a new player and add it to our players object
     players[socket.id] = {
       rotation: 0,
-      x: Math.floor(Math.random() * 300+50),
-      y: Math.floor(Math.random() * 200+50),
+      x: Math.floor(800),
+      y: Math.floor(650),
       frame: 0,
       playerId: socket.id,
       name: "guest",
@@ -35,14 +35,16 @@ io.on('connection', function (socket) {
    
     // when a player disconnects, remove them from our players object
     socket.on('disconnect', function () {
-      console.log('user disconnected'.red);
+      console.log(`user disconnected: ${socket.id}`.red);
       // remove this player from our players object
       
       delete players[socket.id];
       // emit a message to all players to remove this player
       io.emit('disconnectPlayer', socket.id);
     });
-
+    socket.on('newPoo', function (pooInfo) {
+        socket.broadcast.emit('newPoo', { x:pooInfo.x,y:pooInfo.y, color:players[socket.id].color });
+    });
     socket.on('playerInfo', function (playerInfo) {
         console.log(`playerinfo name: ${playerInfo.name} color: ${playerInfo.color}`.yellow);
         players[socket.id].name = playerInfo.name;
