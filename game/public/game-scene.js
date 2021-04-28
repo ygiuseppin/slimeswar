@@ -6,15 +6,20 @@ const CAMERA_HEIGHT = 600;
 const FREE_MODE_ON = true;
 const MAX_LIVES = 3;
 
-const TILE_SET = 'dungeon.png';
-const TILE_MAP = 'cueva1.json';
+const TILE_SET = 'pokenew.png';
+const TILE_MAP = 'pokemapa.json';
 const TILE_WIDTH = 32;
 const TILE_HEIGHT = 32;
+
+const DIAGVEL = 0.75;
 
 // VARIABLE
 let POO_DELAY = 2000;
 let VELOCITY = 180;
-let POO_DURATION = 6000;
+let POO_DURATION = 3000;
+let DEAD_DURATION = 5000;
+let EXP_DURATION = 64;
+let INMUNITY_TIME = 2000;
 
 // Game Scene
 class GameScene extends Phaser.Scene {
@@ -29,6 +34,13 @@ class GameScene extends Phaser.Scene {
 
     execCommand (command) {
         switch(command.split(' ')[0]) {
+            case '/pro':
+                POO_DELAY = 50;
+                POO_DURATION = 1000;
+                DEAD_DURATION = 100;
+                VELOCITY = 300;
+                this.addToChatArea(`< You are pro now >`);
+                break;
             case '/poodelay':
                 POO_DELAY = command.split(' ')[1] ? parseInt(command.split(' ')[1]) : 2000;
                 this.addToChatArea(`< Poo delay is now ${POO_DELAY}ms >`);
@@ -36,6 +48,10 @@ class GameScene extends Phaser.Scene {
             case '/pooduration':
                 POO_DURATION = command.split(' ')[1] ? parseInt(command.split(' ')[1]) : 6000;
                 this.addToChatArea(`< Poo duration is now ${POO_DURATION}ms >`);
+                break;
+            case '/deadduration':
+                DEAD_DURATION = command.split(' ')[1] ? parseInt(command.split(' ')[1]) : 10000;
+                this.addToChatArea(`< Dead duration is now ${DEAD_DURATION}ms >`);
                 break;
             case '/velocity':
                 VELOCITY = command.split(' ')[1] ? parseInt(command.split(' ')[1]) : 180;
@@ -87,6 +103,7 @@ class GameScene extends Phaser.Scene {
         this.otherPlayers = this.physics.add.group();
         this.otherNames = {};
         this.poos = this.physics.add.group();
+        this.explosions = this.physics.add.group();
         this.lastPooTime = new Date();
         this.nameSent = false;
 
@@ -105,6 +122,12 @@ class GameScene extends Phaser.Scene {
     }
 
     loadSprites() {
+        // explosion
+        this.load.spritesheet(`explosion`, `./assets/explosion.png`, { 
+            frameWidth: 256, 
+            frameHeight: 256 
+        });
+
         // poo
         for (let color of COLORS) {
             this.load.spritesheet(`poo${color}`, `./assets/slimes/poo${color}.png`, { 
@@ -112,7 +135,6 @@ class GameScene extends Phaser.Scene {
                 frameHeight: 28 
             });
         }
-
         // slimes
         for (let color of COLORS) {
             this.load.spritesheet(`slime${color}`, `./assets/slimes/slime${color}.png`, { 
@@ -123,14 +145,31 @@ class GameScene extends Phaser.Scene {
     }
 
     createAnimations() {
+        // explosion
+        this.anims.create({
+            key:`explode`,
+            frames: this.anims.generateFrameNumbers(`explosion`,{start:0,end:64}),
+            frameRate: 120,
+            repeat: false
+        });
+
         // players
         for (let color of COLORS) {
+            //dead
+            this.anims.create({
+                key:`dead${color}`,
+                frames: this.anims.generateFrameNumbers(`slime${color}`,{start:13,end:13}),
+                frameRate: VELOCITY/10,
+                repeat: false
+            });
+            //move
             this.anims.create({
                 key:`move${color}`,
                 frames: this.anims.generateFrameNumbers(`slime${color}`,{start:0,end:12}),
                 frameRate: VELOCITY/10,
                 repeat: true
             });
+            //static
             this.anims.create({
                 key:`turn${color}`,
                 frames: this.anims.generateFrameNumbers(`slime${color}`,{start:0,end:0}),
@@ -155,7 +194,7 @@ class GameScene extends Phaser.Scene {
                     self.addOtherPlayers(self, players[id]);
                 }else{
                     self.addPlayer(self, players[id]);
-                }
+                    }
             });
         });
         this.socket.on('newMessage', function (messageInfo) {
@@ -194,11 +233,19 @@ class GameScene extends Phaser.Scene {
               if (playerInfo.playerId === otherPlayer.playerId) {
                 otherPlayer.setPosition(playerInfo.x, playerInfo.y);
                 // set frame
-                otherPlayer.anims.play( {key:`move${playerInfo.color}`,startFrame:playerInfo.frame});
+                console.log(playerInfo);
+                if (playerInfo.frame == "13"){
+                    otherPlayer.anims.play( {key:`dead${playerInfo.color}`,startFrame:playerInfo.frame});
+                } else {
+                    otherPlayer.anims.play( {key:`move${playerInfo.color}`,startFrame:playerInfo.frame});
+                }
                 otherPlayer.anims.pause(otherPlayer.anims.currentFrame);
+                otherPlayer.alpha = playerInfo.alpha;
+                otherPlayer.deadCount = playerInfo.deadCount;
 
                 const name = self.otherNames[otherPlayer.playerId];
                 name.setPosition(playerInfo.x-name.width/2,playerInfo.y-25);
+                name.alpha = playerInfo.alpha
               }
             }); 
         });
@@ -206,32 +253,40 @@ class GameScene extends Phaser.Scene {
             this.scene.start('menu');
         })
         this.socket.on('newPoo', (pooInfo) => {
-            this.addPoo(pooInfo.x, pooInfo.y, pooInfo.color);
+            this.addPoo(pooInfo.x, pooInfo.y, pooInfo.color, pooInfo.duration);
         });
     }
 
-    addPoo (x,y,color) {
+    addPoo (x,y,color,duration) {
         const newPoo = this.physics.add.sprite(x, y, `poo${color}`);
         newPoo.setDepth(0.1);
         newPoo.creationTime = new Date();
+        newPoo.duration = duration;
         this.poos.add(newPoo);
     }
 
     create () {
+        this.dead = false;
+        this.deadCount = 0;
+        this.inmune = false;
+        this.reviveTime = new Date();
+
         // chat
         this.createChat();
         if (FREE_MODE_ON) {
-            this.addToChatArea('< Free mode on >\n< Commands: \n/nopoo\n/poodelay <ms>\n/pooduration <ms>\n/velocity <px/sec> >');
+            this.addToChatArea('< Free mode on >\n< Commands: \n/nopoo\n/poodelay <ms>\n/pooduration <ms>\n/deadduration <ms>\n/velocity <px/sec>\n/pro >');
         }
 
         // generate tilemap
-        const map = this.make.tilemap({ key: "map" });
-        const tileset = map.addTilesetImage('dungeon','tiles');
+        const map = this.make.tilemap({ key: "map", renderOrder: "right-up" });
+        const tileset = map.addTilesetImage(`pokenew`,'tiles');
         this.groundLayer = map.createLayer('bot', tileset).setDepth(-1);
+        this.midLayer = map.createLayer('mid', tileset).setDepth(0.5);
         this.wallsLayer = map.createLayer('top', tileset).setDepth(1);
         this.groundLayer.setCollisionByProperty({ collides: true});
+        this.midLayer.setCollisionByProperty({ collides: true});
 
-/*
+
         // debug collision
         const debugGraphics = this.add.graphics().setAlpha(0.7);
         this.groundLayer.renderDebug(debugGraphics, {
@@ -239,7 +294,7 @@ class GameScene extends Phaser.Scene {
             collidingTileColor: new Phaser.Display.Color(243,234,48,255),
             faceColor: new Phaser.Display.Color(40,39,37,255),
         });
-*/      
+
 
         // bounds
         this.physics.world.bounds = new Phaser.Geom.Rectangle(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -256,6 +311,7 @@ class GameScene extends Phaser.Scene {
             delay: 3,callback:()=>{this.myUpdate(this)},loop:true});
 
         timer.paused = false;  
+
         console.log('Game Created');  
     }
 
@@ -266,17 +322,53 @@ class GameScene extends Phaser.Scene {
                 self.socket.emit('playerInfo', {name:localStorage.getItem('name') || 'pepe', color: localStorage.getItem('color')});
                 self.nameSent = true;
             }
-            self.playerMovement();
-            self.socket.emit('playerMovement', { x: self.player.x, y: self.player.y, frame: self.player.anims.getFrameName().toString() });
+            if (!self.dead){
+                self.playerMovement();
+            } else {
+                self.tryRevive(self);
+            }
+            self.socket.emit('playerMovement', { x: self.player.x, y: self.player.y, frame: self.player.anims.getFrameName().toString(), alpha: self.player.alpha, deadCount: self.deadCount});
             self.updatePlayerList(self);
-
             self.removeOldPoos(self);
+            self.removeOldExplosions(self);
+
+            if (self.inmune && new Date() - self.reviveTime > INMUNITY_TIME) {
+                self.inmune = false;
+            }
+
+            // opacity when inmunity is on
+            if (self.inmune){
+                self.player.alpha = 0.3;
+                self.myname.alpha = 0.3;
+            }else{
+                self.player.alpha = 1;
+                self.myname.alpha = 1;
+            }
         }
+    }
+
+    tryRevive(self) {
+        if(self.dead && (new Date() - self.deadAt > DEAD_DURATION)) {
+            // revive
+            self.dead = false;
+            self.inmune = true;
+            self.reviveTime = new Date();
+            self.player.anims.play(`turn${self.color}`);
+        }
+    }
+
+    removeOldExplosions(self) {
+        self.explosions.getChildren().forEach((exp) => {
+            if (new Date() - exp.creationTime > 450) {
+                exp.destroy();
+            }
+        });
     }
 
     removeOldPoos(self) {
         self.poos.getChildren().forEach((poo) => {
-            if (new Date() - poo.creationTime > POO_DURATION) {
+            if (new Date() - poo.creationTime > poo.duration) {
+                self.addExplosion(self,poo.x,poo.y);
                 poo.destroy();
             }
         });
@@ -284,11 +376,39 @@ class GameScene extends Phaser.Scene {
 
     updatePlayerList (self) {
         // update player list
-        let playerListText = `${self.playerName}\n`;
+        let playerListText = `${self.playerName} (deads:${self.deadCount})\n`;
         for (var key in self.otherNames){
-            playerListText += self.otherNames[key].text +'\n'
+            let deadCount = 0;
+            self.otherPlayers.getChildren().forEach(otherPlayer => {
+                if (otherPlayer.playerId == key){
+                    deadCount = otherPlayer.deadCount;
+                }
+            });
+            playerListText += self.otherNames[key].text + ` (deads: ${deadCount})\n`;
         }
         $('#playerList').text(playerListText);
+    }
+
+    die() {
+        if (!this.dead && !this.inmune){
+            this.dead = true;
+            this.deadCount = this.deadCount+1;
+            this.deadAt = new Date();
+            // dead animation
+            console.log('die');
+            this.player.anims.play(`dead${this.color}`);
+            this.player.setVelocityX(0);
+            this.player.setVelocityY(0);
+        }
+    }
+
+    addExplosion(self, x, y) {
+        const newExplosion = self.physics.add.sprite(x, y, 'explosion').setScale(0.9).setDepth(1);
+        newExplosion.body.setSize(newExplosion.width*0.45,newExplosion.height*0.45);
+        self.physics.add.overlap(self.player, newExplosion, self.die, null, self);
+        newExplosion.anims.play(`explode`);
+        newExplosion.creationTime = new Date();
+        this.explosions.add(newExplosion);
     }
 
     addPlayer(self, playerInfo) {
@@ -302,6 +422,7 @@ class GameScene extends Phaser.Scene {
         // collider player vs map
         //self.player.setCollideWorldBounds(true);
         self.physics.add.collider(self.player, self.groundLayer);
+        self.physics.add.collider(self.player, self.midLayer);
         self.player.body.setSize(self.player.width*0.8, self.player.height*0.4);
         self.player.body.offset.y = 20;
     }
@@ -313,6 +434,7 @@ class GameScene extends Phaser.Scene {
         const name = self.add.bitmapText(0, 0, 'myfont', playerInfo.name, 14).setDepth(0.5);
         name.setPosition(playerInfo.x-name.width/2,playerInfo.y-25);
         otherPlayer.playerId = playerInfo.playerId;
+        otherPlayer.deadCount = 0;
         
         self.otherNames[playerInfo.playerId] = name;
         self.otherPlayers.add(otherPlayer);
@@ -322,28 +444,40 @@ class GameScene extends Phaser.Scene {
         // add poo
         if (this.qKey.isDown && (new Date() - this.lastPooTime) > POO_DELAY){
             this.lastPooTime = new Date();
-            this.addPoo(this.player.x, this.player.y, this.color);
-            this.socket.emit('newPoo', {x:this.player.x,y:this.player.y});
+            this.addPoo(this.player.x, this.player.y, this.color, POO_DURATION);
+            this.socket.emit('newPoo', {x:this.player.x,y:this.player.y,duration: POO_DURATION});
         }
 
-        // Move x
-        if (this.cursors.left.isDown){
+        // Move
+        if (this.cursors.left.isDown && this.cursors.down.isDown){
+            this.player.setVelocityX(-VELOCITY*DIAGVEL);
+            this.player.setVelocityY(VELOCITY*DIAGVEL);
+        } else if (this.cursors.left.isDown && this.cursors.up.isDown){
+            this.player.setVelocityX(-VELOCITY*DIAGVEL);
+            this.player.setVelocityY(-VELOCITY*DIAGVEL);
+        } else if(this.cursors.right.isDown && this.cursors.down.isDown){
+            this.player.setVelocityX(VELOCITY*DIAGVEL);
+            this.player.setVelocityY(VELOCITY*DIAGVEL);
+        } else if(this.cursors.right.isDown && this.cursors.up.isDown) {
+            this.player.setVelocityX(VELOCITY*DIAGVEL);
+            this.player.setVelocityY(-VELOCITY*DIAGVEL);
+        } else if (this.cursors.left.isDown){
             this.player.setVelocityX(-VELOCITY);
+            this.player.setVelocityY(0);
         } else if (this.cursors.right.isDown){
             this.player.setVelocityX(VELOCITY);
-        } else {
-            this.player.setVelocityX(0);
-        }
-
-        // Move y
-        if (this.cursors.up.isDown) {
+            this.player.setVelocityY(0);
+        } else if (this.cursors.up.isDown) {
             this.player.setVelocityY(-VELOCITY);
+            this.player.setVelocityX(0);
         } else if (this.cursors.down.isDown) {
             this.player.setVelocityY(VELOCITY);
+            this.player.setVelocityX(0);
         } else {
+            this.player.setVelocityX(0);
             this.player.setVelocityY(0);
-        }
-
+        }     
+        
         // Play/Stop animation
         if (this.cursors.left.isDown || this.cursors.right.isDown || this.cursors.up.isDown || this.cursors.down.isDown) {
             this.player.anims.play(`move${this.color}`, true);

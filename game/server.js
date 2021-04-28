@@ -24,7 +24,8 @@ io.on('connection', function (socket) {
       frame: 0,
       playerId: socket.id,
       name: "guest",
-      color: "rojo"
+      color: "rojo",
+      deadCount: 0
     };
 
     // send the initial players positions object to the new player
@@ -43,7 +44,7 @@ io.on('connection', function (socket) {
       io.emit('disconnectPlayer', socket.id);
     });
     socket.on('newPoo', function (pooInfo) {
-        socket.broadcast.emit('newPoo', { x:pooInfo.x,y:pooInfo.y, color:players[socket.id].color });
+        socket.broadcast.emit('newPoo', { x:pooInfo.x,y:pooInfo.y, duration: pooInfo.duration, color:players[socket.id].color });
     });
     socket.on('playerInfo', function (playerInfo) {
         console.log(`playerinfo name: ${playerInfo.name} color: ${playerInfo.color}`.yellow);
@@ -62,6 +63,8 @@ io.on('connection', function (socket) {
         players[socket.id].x = movementData.x;
         players[socket.id].y = movementData.y;
         players[socket.id].frame = movementData.frame;
+        players[socket.id].alpha = movementData.alpha;
+        players[socket.id].deadCount = movementData.deadCount;
 
         // emit a message to all players about the player that moved
         socket.broadcast.emit('playerMoved', players[socket.id]);
